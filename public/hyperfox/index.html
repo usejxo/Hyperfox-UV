@@ -73,7 +73,6 @@
     const connection = new BareMux.BareMuxConnection(
       "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/baremux/worker.js"
     );
-    // Use secure WebSocket
     const wispUrl = "wss://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/wisp/";
     const bareUrl = "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/bare/";
     (async () => {
@@ -84,9 +83,7 @@
     })();
 
     // State
-    let tabs = [];
-    let activeIndex = -1;
-
+    let tabs = [], activeIndex = -1;
     const tabBar = document.getElementById('tab-bar');
     const iframe = document.getElementById('iframeContainer');
     const urlInput = document.getElementById('urlInput');
@@ -100,49 +97,38 @@
 
     function getFaviconUrl(tab) {
       try {
-        const url = resolveUrl(tab.url);
-        if (!url.startsWith('assets/')) {
-          const link = (iframe.contentDocument || iframe.contentWindow.document)
-                        .querySelector('link[rel*="icon"]');
-          if (link && link.href) return link.href;
-          const root = new URL(url).origin;
-          return root + '/favicon.ico';
-        }
-      } catch (e) {}
-      return 'assets/images/favicon-default.png';
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        const link = doc.querySelector('link[rel*="icon"]');
+        if (link && link.href) return link.href;
+        const origin = new URL(resolveUrl(tab.url)).origin;
+        return origin + '/favicon.ico';
+      } catch { return 'assets/images/favicon-default.png'; }
     }
 
     function renderTabs() {
       tabBar.querySelectorAll('.tab').forEach(el => el.remove());
-      tabs.forEach((t, i) => {
+      tabs.forEach((t,i) => {
         const el = document.createElement('div');
-        el.className = 'tab' + (i === activeIndex ? ' active' : '');
+        el.className = 'tab' + (i===activeIndex?' active':'');
         el.title = t.title;
-        const favicon = document.createElement('img');
-        favicon.className = 'favicon';
-        favicon.src = getFaviconUrl(t);
-        const label = document.createElement('span');
-        label.className = 'label';
-        label.textContent = t.title;
-        const close = document.createElement('span');
-        close.className = 'close';
-        close.textContent = '×';
-        el.append(favicon, label, close);
-        el.onclick = e => { if (e.target === close) closeTab(i); else switchTab(i); };
-        el.onmouseenter = () => { label.textContent = t.title; };
+        const fav = document.createElement('img'); fav.className='favicon'; fav.src = getFaviconUrl(t);
+        const lbl = document.createElement('span'); lbl.className='label'; lbl.textContent = t.title;
+        const cls = document.createElement('span'); cls.className='close'; cls.textContent='×';
+        el.append(fav,lbl,cls);
+        el.onclick = e => e.target===cls? closeTab(i): switchTab(i);
         tabBar.insertBefore(el, newTabBtn);
       });
     }
 
-    function addTab(url = 'HF://home') {
-      tabs.push({ url, history: [], forward: [], title: 'New Tab' });
+    function addTab(url='HF://home') {
+      tabs.push({ url, history:[], forward:[], title:'New Tab' });
       activeIndex = tabs.length - 1;
       renderTabs();
       loadTab();
     }
     function closeTab(i) {
-      tabs.splice(i, 1);
-      activeIndex = (i === activeIndex ? Math.max(0, i - 1) : activeIndex - (i < activeIndex ? 1 : 0));
+      tabs.splice(i,1);
+      activeIndex = (i===activeIndex? Math.max(0,i-1) : activeIndex-(i<i?1:0));
       if (!tabs.length) addTab();
       else { renderTabs(); loadTab(false); }
     }
@@ -154,62 +140,54 @@
     function resolveUrl(u) {
       if (u.startsWith('HF://')) {
         const p = u.slice(5);
-        return p === 'home'
-          ? 'assets/home/index.html'
-          : `assets/${p}`;
+        return p==='home'? 'assets/home/index.html': `assets/${p}`;
       }
       return u;
     }
 
-    function loadTab(push = true) {
+    function loadTab(push=true) {
       const tab = tabs[activeIndex];
       const raw = tab.url;
-      const url = resolveUrl(raw);
+      const real = resolveUrl(raw);
       const base = "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app";
-      iframe.src = url.startsWith('assets/')
-        ? url
-        : base + __uv$config.prefix + __uv$config.encodeUrl(url);
+      iframe.src = real.startsWith('assets/')
+        ? real
+        : base + __uv$config.prefix + __uv$config.encodeUrl(real);
       urlInput.value = raw;
     }
 
-    function navigate(raw, push = true) {
+    function navigate(raw,push=true) {
       const tab = tabs[activeIndex];
-      const norm = raw.startsWith('HF://') ? raw
-        : (raw.match(/^https?:\/\//) ? raw : 'HF://' + raw);
-      if (push) { tab.history.push(tab.url); tab.forward = []; }
+      const norm = raw.startsWith('HF://')?raw:(/^https?:\/\//.test(raw)?raw:`HF://${raw}`);
+      if (push) { tab.history.push(tab.url); tab.forward=[]; }
       tab.url = norm;
       loadTab();
     }
 
-    iframe.addEventListener('load', () => {
+    iframe.addEventListener('load',()=>{
       try {
-        const title = (iframe.contentDocument || iframe.contentWindow.document).title;
+        const title = (iframe.contentDocument||iframe.contentWindow.document).title;
         tabs[activeIndex].title = title || tabs[activeIndex].title;
         renderTabs();
       } catch {}
     });
 
-    newTabBtn.onclick = () => addTab();
-    goButton.onclick = () => navigate(urlInput.value);
-    urlInput.onkeypress = e => { if (e.key === 'Enter') navigate(urlInput.value); };
-    backButton.onclick = () => {
+    // Controls
+    newTabBtn.onclick = ()=>addTab();
+    goButton.onclick = ()=>navigate(urlInput.value);
+    urlInput.onkeypress = e=>{ if(e.key==='Enter') navigate(urlInput.value); };
+    backButton.onclick = ()=>{
       const tab = tabs[activeIndex];
-      if (tab.history.length) {
-        tab.forward.push(tab.url);
-        navigate(tab.history.pop(), false);
-      }
+      if (tab.history.length) { tab.forward.push(tab.url); navigate(tab.history.pop(),false); }
     };
-    forwardButton.onclick = () => {
+    forwardButton.onclick = ()=>{
       const tab = tabs[activeIndex];
-      if (tab.forward.length) {
-        tab.history.push(tab.url);
-        navigate(tab.forward.pop(), false);
-      }
+      if (tab.forward.length) { tab.history.push(tab.url); navigate(tab.forward.pop(),false); }
     };
-    refreshButton.onclick = () => loadTab(false);
-    homeButton.onclick = () => navigate('HF://home');
-    switcher.onchange = async () => {
-      if (switcher.value === 'epoxy') {
+    refreshButton.onclick = ()=>loadTab(false);
+    homeButton.onclick = ()=>navigate('HF://home');
+    switcher.onchange = async ()=>{
+      if (switcher.value==='epoxy') {
         await connection.setTransport(
           "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/epoxy/index.mjs",
           [{ wisp: wispUrl }]
@@ -223,7 +201,7 @@
       loadTab(false);
     };
 
-    // Initialize
+    // Start
     addTab();
   </script>
 </body>
