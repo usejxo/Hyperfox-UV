@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HyperFox Browser</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Courier New', Courier, monospace;
+      background: linear-gradient(135deg, #0f1d2e, #112);
+      color: #eee;
+      overflow: hidden;
+    }
+    /* Header container now extends into two rows */
+    #header {
+      display: flex;
+      flex-direction: column;
+      background: rgba(0, 31, 63, 0.8);
+      padding: 10px;
+      box-shadow: 0 0 15px rgba(255, 133, 27, 0.5);
+    }
+    /* Top row for logo and controls */
+    #header-top {
+      display: flex;
+      align-items: center;
+    }
+    /* Larger logo image with neon glow */
+    #logo {
+      height: 60px;
+      max-width: 200px;
+      margin-right: 20px;
+      filter: drop-shadow(0 0 15px rgba(255, 165, 0, 0.9));
+    }
+    /* Controls container */
+    #controls {
+      display: flex;
+      align-items: center;
+      flex-grow: 1;
+    }
+    /* Navigation buttons styling */
+    button {
+      background: rgba(255, 133, 27, 0.7);
+      border: 1px solid rgba(255, 133, 27, 0.9);
+      padding: 5px 10px;
+      margin-right: 5px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 1em;
+      border-radius: 3px;
+      box-shadow: 0 0 8px rgba(255, 133, 27, 0.7);
+      transition: box-shadow 0.3s ease, background 0.3s ease;
+    }
+    button:hover {
+      background: rgba(255, 133, 27, 0.9);
+      box-shadow: 0 0 12px rgba(255, 133, 27, 1);
+    }
+    /* URL input styling */
+    input[type="text"] {
+      flex-grow: 1;
+      padding: 5px;
+      font-size: 1em;
+      border: 1px solid rgba(255, 133, 27, 0.9);
+      border-radius: 3px;
+      margin-right: 5px;
+      background: rgba(0, 31, 63, 0.6);
+      color: #fff;
+      box-shadow: 0 0 8px rgba(255, 133, 27, 0.5);
+      outline: none;
+      transition: box-shadow 0.3s ease;
+    }
+    input[type="text"]:focus {
+      box-shadow: 0 0 12px rgba(255, 133, 27, 0.8);
+    }
+    /* Bottom row for proxy status message */
+    #header-bottom {
+      margin-top: 5px;
+      text-align: center;
+      font-size: 0.9em;
+    }
+    /* Iframe container styling */
+    #iframeContainer {
+      width: 100%;
+      height: calc(100vh - 100px);
+      border: none;
+      background: rgba(0, 0, 0, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <div id="header-top">
+      <img id="logo" src="apps/hyperfox/assets/images/logo.png" alt="HyperFox Logo" />
+      <div id="controls">
+        <button id="back">◀</button>
+        <button id="forward">▶</button>
+        <button id="refresh">⟳</button>
+        <button id="home">🏠</button>
+        <button id="toggleProxy">Proxy</button>
+        <input type="text" id="urlInput" placeholder="Enter URL" />
+        <button id="go">Go</button>
+      </div>
+    </div>
+    <div id="header-bottom">
+      <span id="proxyMessage"></span>
+    </div>
+  </div>
+  
+  <iframe id="iframeContainer" src="apps/hyperfox/assets/home/index.html"></iframe>
+  
+  <script>
+    // Utility: read ?key=value
+    function getQueryParam(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
+
+    // Read kiosk + proxy flags and target URL
+    const isKiosk   = getQueryParam("kiosk")  === "true";
+    const kioskUrl  = getQueryParam("url");
+    const proxyInit = getQueryParam("proxy")  === "true";
+
+    // DOM refs
+    const header            = document.getElementById('header');
+    const iframe            = document.getElementById('iframeContainer');
+    const urlInput          = document.getElementById('urlInput');
+    const backButton        = document.getElementById('back');
+    const forwardButton     = document.getElementById('forward');
+    const refreshButton     = document.getElementById('refresh');
+    const homeButton        = document.getElementById('home');
+    const goButton          = document.getElementById('go');
+    const toggleProxyButton = document.getElementById('toggleProxy');
+    const proxyMessage      = document.getElementById('proxyMessage');
+
+    // History + proxy state
+    let historyStack = [];
+    let forwardStack = [];
+    let proxyOn      = proxyInit;
+
+    // Initialize proxy button text
+    function updateProxyUI() {
+      if (proxyOn) {
+        toggleProxyButton.textContent = 'Proxy: ON';
+        proxyMessage.textContent = '⚠️ Some sites may not load properly or at all.';
+      } else {
+        toggleProxyButton.textContent = 'Proxy: OFF';
+        proxyMessage.textContent = 'Only sites allowing iframes will show.';
+      }
+    }
+    updateProxyUI();
+
+    // If kiosk mode, hide header and go full‑screen
+    if (isKiosk && kioskUrl) {
+      header.style.display    = 'none';
+      iframe.style.height     = '100vh';
+      navigate(kioskUrl);
+    }
+
+    // Listen for clicks inside proxy‑loaded pages
+    window.addEventListener('message', e => {
+      if (e.data?.type === 'navigate' && e.data.url) {
+        navigate(e.data.url);
+      }
+    });
+
+    // Core navigation function
+    function navigate(rawUrl, pushHistory = true) {
+      let url = rawUrl;
+      if (!url.match(/^https?:\/\//) && !url.startsWith('assets/')) {
+        url = 'https://' + url;
+      }
+
+      if (proxyOn) {
+        fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url))
+          .then(r => r.text())
+          .then(html => {
+            const base = new URL(url).origin;
+            html = html.replace(/(src|href)=["']\/(?!\/)/g,
+              (m,p1) => `${p1}="https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(base)}/`
+            );
+            const inject = `<script>
+  document.addEventListener('click', e => {
+    let t = e.target;
+    while (t && t !== document) {
+      if (t.tagName==='A' && t.href) {
+        e.preventDefault();
+        parent.postMessage({type:'navigate',url:t.href},'*');
+        break;
+      }
+      t = t.parentElement;
+    }
+  });
+<\/script>`;
+            html = html.includes('</head>')
+              ? html.replace('</head>', inject + '</head>')
+              : html.includes('</body>')
+                ? html.replace('</body>', inject + '</body>')
+                : inject + html;
+
+            const blobUrl = URL.createObjectURL(new Blob([html], {type:'text/html'}));
+            iframe.src = blobUrl;
+            urlInput.value = url;
+            if (pushHistory) { historyStack.push(url); forwardStack = []; }
+          })
+          .catch(() => alert('Failed to load via proxy.'));
+      } else {
+        iframe.src = url;
+        urlInput.value = url;
+        if (pushHistory) { historyStack.push(url); forwardStack = []; }
+      }
+    }
+
+    // UI event handlers
+    goButton.addEventListener('click',  () => navigate(urlInput.value));
+    urlInput .addEventListener('keypress', e => { if (e.key==='Enter') navigate(urlInput.value); });
+    backButton .addEventListener('click', () => {
+      if (historyStack.length) {
+        forwardStack.push(urlInput.value);
+        navigate(historyStack.pop(), false);
+      }
+    });
+    forwardButton.addEventListener('click', () => {
+      if (forwardStack.length) {
+        historyStack.push(urlInput.value);
+        navigate(forwardStack.pop(), false);
+      }
+    });
+    refreshButton.addEventListener('click', () => navigate(urlInput.value, false));
+    homeButton.addEventListener('click',    () => navigate('apps/hyperfox/assets/home/index.html'));
+    toggleProxyButton.addEventListener('click', () => {
+      proxyOn = !proxyOn;
+      updateProxyUI();
+      navigate(urlInput.value, false);
+    });
+  </script>
+</body>
+</html>

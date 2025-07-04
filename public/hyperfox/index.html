@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HyperFox Browser (UV Proxy) with Tabs</title>
+
+  <!-- Ultraviolet scripts -->
+  <script src="http://localhost:8080/uv/uv.bundle.js"></script>
+  <script src="http://localhost:8080/uv/uv.config.js"></script>
+
+  <!-- BareMux for alternative transports -->
+  <script src="http://localhost:8080/baremux/index.js"></script>
+
+  <!-- Register UV Service Worker -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("http://localhost:8080/uv/uv.sw.js", {
+          scope: __uv$config.prefix,
+        });
+      });
+    }
+  </script>
+
+  <style>
+    body { margin:0; font-family:Courier, monospace; background:linear-gradient(135deg,#0f1d2e,#112); color:#eee; overflow:hidden; }
+    #header { display:flex; flex-direction:column; background:rgba(0,31,63,0.8); }
+    #tab-bar { display:flex; align-items:center; padding:8px; background:rgba(0,31,63,0.9); }
+    .tab { display:flex; align-items:center; flex:0 0 auto; height:36px; margin-right:5px; background:rgba(255,133,27,0.2); border-radius:4px; cursor:pointer; overflow:hidden; max-width: max-content; }
+    .tab.active { background:rgba(255,133,27,0.7); }
+    .tab .favicon { flex-shrink:0; width:20px; height:20px; margin:0 6px; }
+    .tab .label { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:6px; }
+    .tab .close { flex-shrink:0; margin:0 6px; font-weight:bold; cursor:pointer; }
+    #new-tab { font-size:1.2em; cursor:pointer; padding:4px 8px; }
+    #header-top { display:flex; align-items:center; padding:10px; box-shadow:0 0 10px rgba(0,0,0,0.5); }
+    #logo { height:40px; margin-right:10px; filter:drop-shadow(0 0 10px rgba(255,165,0,0.9)); }
+    #controls { display:flex; align-items:center; flex-grow:1; }
+    button { background:rgba(255,133,27,0.7); border:1px solid rgba(255,133,27,0.9); padding:6px 12px; margin-right:5px; color:#fff; cursor:pointer; border-radius:4px; transition:0.3s; }
+    button:hover { background:rgba(255,133,27,0.9); }
+    input[type="text"] { flex-grow:1; padding:6px; border:1px solid rgba(255,133,27,0.9); border-radius:4px; margin-right:5px; background:rgba(0,31,63,0.6); color:#fff; }
+    #transportSwitcher { margin-left:10px; padding:6px; border-radius:4px; background:rgba(0,31,63,0.6); color:#fff; border:1px solid rgba(255,133,27,0.9); }
+    #header-bottom { padding:5px 10px; text-align:center; font-size:0.9em; }
+    #iframeContainer { width:100%; height:calc(100vh - 130px); border:none; background:rgba(0,0,0,0.5); }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <div id="tab-bar">
+      <span id="new-tab">＋</span>
+    </div>
+    <div id="header-top">
+      <img id="logo" src="assets/images/logo.png" alt="HyperFox Logo" />
+      <div id="controls">
+        <button id="back">◀</button>
+        <button id="forward">▶</button>
+        <button id="refresh">⟳</button>
+        <button id="home">🏠</button>
+        <input type="text" id="urlInput" placeholder="Enter URL" />
+        <button id="go">Go</button>
+        <select id="transportSwitcher" title="Choose Transport">
+          <option value="epoxy">Epoxy</option>
+          <option value="bare">Bare</option>
+        </select>
+      </div>
+    </div>
+    <div id="header-bottom"><span>Powered by Ultraviolet Proxy</span></div>
+  </div>
+  <iframe id="iframeContainer"></iframe>
+
+  <script>
+    // Transport setup
+    const connection = new BareMux.BareMuxConnection("http://localhost:8080/baremux/worker.js");
+    const wispUrl = "ws://localhost:8080/wisp/";
+    const bareUrl = "http://localhost:8080/bare/";
+    (async()=>{ await connection.setTransport("http://localhost:8080/epoxy/index.mjs",[{wisp:wispUrl}]); })();
+
+    // State
+    let tabs = [];
+    let activeIndex = -1;
+
+    const tabBar = document.getElementById('tab-bar');
+    const iframe = document.getElementById('iframeContainer');
+    const urlInput = document.getElementById('urlInput');
+    const backButton = document.getElementById('back');
+    const forwardButton = document.getElementById('forward');
+    const refreshButton = document.getElementById('refresh');
+    const homeButton = document.getElementById('home');
+    const goButton = document.getElementById('go');
+    const switcher = document.getElementById('transportSwitcher');
+    const newTabBtn = document.getElementById('new-tab');
+
+    function getFaviconUrl(tab) {
+      try {
+        const url = resolveUrl(tab.url);
+        if (!url.startsWith('assets/')) {
+          const link = (iframe.contentDocument || iframe.contentWindow.document)
+                        .querySelector('link[rel*="icon"]');
+          if (link && link.href) return link.href;
+          const root = new URL(url).origin;
+          return root + '/favicon.ico';
+        }
+      } catch(e) {}
+      return 'assets/images/favicon-default.png';
+    }
+
+    function renderTabs() {
+      tabBar.querySelectorAll('.tab').forEach(el=>el.remove());
+      tabs.forEach((t,i)=>{
+        const el = document.createElement('div');
+        el.className = 'tab' + (i===activeIndex?' active':'');
+        el.title = t.title;
+        const favicon = document.createElement('img'); favicon.className='favicon'; favicon.src = getFaviconUrl(t);
+        const label = document.createElement('span'); label.className='label'; label.textContent = t.title;
+        const close = document.createElement('span'); close.className='close'; close.textContent='×';
+        el.append(favicon, label, close);
+        el.onclick = e=>{ if(e.target===close) closeTab(i); else switchTab(i); };
+        el.onmouseenter = ()=>{ label.textContent = t.title; };
+        tabBar.insertBefore(el,newTabBtn);
+      });
+    }
+
+    function addTab(url='HF://home') { tabs.push({ url, history:[], forward:[], title:'New Tab' }); activeIndex=tabs.length-1; renderTabs(); loadTab(); }
+    function closeTab(i) { tabs.splice(i,1); activeIndex = (i===activeIndex?Math.max(0,i-1):activeIndex-(i<activeIndex?1:0)); if(!tabs.length) addTab(); else renderTabs(), loadTab(false); }
+    function switchTab(i) { activeIndex=i; renderTabs(); loadTab(false); }
+    function resolveUrl(u) { if(u.startsWith('HF://')){ const p=u.slice(5); return p==='home'?'assets/home/index.html':`assets/${p}`;} return u; }
+    function loadTab(push=true){ const tab=tabs[activeIndex]; const raw=tab.url; const url=resolveUrl(raw); iframe.src=url.startsWith('assets/')?url:__uv$config.prefix+__uv$config.encodeUrl(url); urlInput.value=raw; }
+    function navigate(raw,push=true){ const tab=tabs[activeIndex]; const norm=raw.startsWith('HF://')?raw:(raw.match(/^https?:\/\//)?raw:'HF://'+raw); if(push){tab.history.push(tab.url);tab.forward=[];} tab.url=norm; loadTab(); }
+
+    iframe.addEventListener('load',()=>{ try{ const title=(iframe.contentDocument||iframe.contentWindow.document).title; tabs[activeIndex].title=title||tabs[activeIndex].title; renderTabs(); }catch{} });
+
+    newTabBtn.onclick=()=>addTab(); goButton.onclick=()=>navigate(urlInput.value); urlInput.onkeypress=e=>{if(e.key==='Enter')navigate(urlInput.value);};
+    backButton.onclick=()=>{const tab=tabs[activeIndex]; if(tab.history.length){tab.forward.push(tab.url);navigate(tab.history.pop(),false);}};
+    forwardButton.onclick=()=>{const tab=tabs[activeIndex]; if(tab.forward.length){tab.history.push(tab.url);navigate(tab.forward.pop(),false);}};
+    refreshButton.onclick=()=>loadTab(false); homeButton.onclick=()=>navigate('HF://home');
+    switcher.onchange=async()=>{ if(switcher.value==='epoxy') await connection.setTransport("http://localhost:8080/epoxy/index.mjs",[{wisp:wispUrl}]); else await connection.setTransport("http://localhost:8080/baremod/index.mjs",[bareUrl]); loadTab(false); };
+
+    addTab();
+  </script>
+</body>
+</html>
