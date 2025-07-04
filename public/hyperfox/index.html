@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>HyperFox Browser (UV Proxy) with Tabs</title>
 
-  <!-- Ultraviolet scripts -->
+  <!-- Ultraviolet scripts (hard‑coded base) -->
   <script src="https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/uv/uv.bundle.js"></script>
   <script src="https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/uv/uv.config.js"></script>
 
@@ -16,7 +16,7 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker.register(
-          window.location.origin + __uv$config.sw,
+          "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app" + __uv$config.sw,
           { scope: __uv$config.prefix }
         );
       });
@@ -27,7 +27,7 @@
     body { margin:0; font-family:Courier, monospace; background:linear-gradient(135deg,#0f1d2e,#112); color:#eee; overflow:hidden; }
     #header { display:flex; flex-direction:column; background:rgba(0,31,63,0.8); }
     #tab-bar { display:flex; align-items:center; padding:8px; background:rgba(0,31,63,0.9); }
-    .tab { display:flex; align-items:center; flex:0 0 auto; height:36px; margin-right:5px; background:rgba(255,133,27,0.2); border-radius:4px; cursor:pointer; overflow:hidden; max-width: max-content; }
+    .tab { display:flex; align-items:center; flex:0 0 auto; height:36px; margin-right:5px; background:rgba(255,133,27,0.2); border-radius:4px; cursor:pointer; overflow:hidden; max-width:max-content; }
     .tab.active { background:rgba(255,133,27,0.7); }
     .tab .favicon { flex-shrink:0; width:20px; height:20px; margin:0 6px; }
     .tab .label { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:6px; }
@@ -69,15 +69,15 @@
   <iframe id="iframeContainer"></iframe>
 
   <script>
-    // Transport setup
+    // Transport setup (hard‑coded base)
     const connection = new BareMux.BareMuxConnection(
-      window.location.origin + "/baremux/worker.js"
+      "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/baremux/worker.js"
     );
-    const wispUrl = window.location.origin.replace(/^http/, 'wss') + "/wisp/";
-    const bareUrl = window.location.origin + "/bare/";
+    const wispUrl = "wss://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/wisp/";
+    const bareUrl = "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/bare/";
     (async () => {
       await connection.setTransport(
-        window.location.origin + "/epoxy/index.mjs",
+        "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/epoxy/index.mjs",
         [{ wisp: wispUrl }]
       );
     })();
@@ -113,17 +113,11 @@
         const el = document.createElement('div');
         el.className = 'tab' + (i===activeIndex?' active':'');
         el.title = t.title;
-        const fav = document.createElement('img');
-        fav.className='favicon';
-        fav.src = getFaviconUrl(t);
-        const lbl = document.createElement('span');
-        lbl.className='label';
-        lbl.textContent = t.title;
-        const cls = document.createElement('span');
-        cls.className='close';
-        cls.textContent='×';
+        const fav = document.createElement('img'); fav.className='favicon'; fav.src = getFaviconUrl(t);
+        const lbl = document.createElement('span'); lbl.className='label'; lbl.textContent = t.title;
+        const cls = document.createElement('span'); cls.className='close'; cls.textContent='×';
         el.append(fav,lbl,cls);
-        el.onclick = e => e.target===cls? closeTab(i): switchTab(i);
+        el.onclick = e => e.target===cls ? closeTab(i) : switchTab(i);
         tabBar.insertBefore(el, newTabBtn);
       });
     }
@@ -134,48 +128,57 @@
       renderTabs();
       loadTab();
     }
-
     function closeTab(i) {
       tabs.splice(i,1);
-      activeIndex = (i===activeIndex? Math.max(0,i-1) : activeIndex-(i<activeIndex?1:0));
+      activeIndex = (i===activeIndex ? Math.max(0,i-1) : activeIndex - (i<activeIndex?1:0));
       if (!tabs.length) addTab();
       else { renderTabs(); loadTab(false); }
     }
-
     function switchTab(i) {
       activeIndex = i;
       renderTabs();
       loadTab(false);
     }
-
     function resolveUrl(u) {
       if (u.startsWith('HF://')) {
         const p = u.slice(5);
-        return p==='home'? 'assets/home/index.html': `assets/${p}`;
+        return p==='home' ? 'assets/home/index.html' : `assets/${p}`;
       }
       return u;
     }
 
-    function loadTab(push=true) {
+    function loadTab(push = true) {
       const tab = tabs[activeIndex];
       const raw = tab.url;
       const real = resolveUrl(raw);
-      const absolutePrefix = window.location.origin + __uv$config.prefix;
+      const absolutePrefix = "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app" + __uv$config.prefix;
       iframe.src = real.startsWith('assets/')
         ? real
         : absolutePrefix + __uv$config.encodeUrl(real);
       urlInput.value = raw;
     }
 
-    function navigate(raw,push=true) {
+    function navigate(raw,push = true) {
       const tab = tabs[activeIndex];
-      const norm = raw.startsWith('HF://')? raw : (/^https?:\/\//.test(raw)? raw : `HF://${raw}`);
+      const norm = raw.startsWith('HF://')? raw : (/^https?:\/\//.test(raw) ? raw : `HF://${raw}`);
       if (push) { tab.history.push(tab.url); tab.forward = []; }
       tab.url = norm;
       loadTab();
     }
 
     iframe.addEventListener('load', () => {
+      try {
+        // Inject <base> so relative URLs also go through proxy
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        const tokenPart = iframe.src.split(__uv$config.prefix)[1].split('?')[0];
+        const baseHref = "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app" + __uv$config.prefix + tokenPart + "/";
+        let base = doc.querySelector('base');
+        if (!base) {
+          base = doc.createElement('base');
+          doc.head.insertBefore(base, doc.head.firstChild);
+        }
+        base.href = baseHref;
+      } catch {}
       try {
         const title = (iframe.contentDocument || iframe.contentWindow.document).title;
         tabs[activeIndex].title = title || tabs[activeIndex].title;
@@ -200,12 +203,12 @@
     switcher.onchange = async () => {
       if (switcher.value === 'epoxy') {
         await connection.setTransport(
-          window.location.origin + '/epoxy/index.mjs',
+          "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/epoxy/index.mjs",
           [{ wisp: wispUrl }]
         );
       } else {
         await connection.setTransport(
-          window.location.origin + '/baremod/index.mjs',
+          "https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/baremod/index.mjs",
           [bareUrl]
         );
       }
