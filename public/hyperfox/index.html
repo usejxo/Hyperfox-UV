@@ -5,17 +5,17 @@
   <title>HyperFox Browser (UV Proxy) with Tabs</title>
 
   <!-- Ultraviolet scripts -->
-  <script src="http://localhost:8080/uv/uv.bundle.js"></script>
-  <script src="http://localhost:8080/uv/uv.config.js"></script>
+  <script src="http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/uv/uv.bundle.js"></script>
+  <script src="http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/uv/uv.config.js"></script>
 
   <!-- BareMux for alternative transports -->
-  <script src="http://localhost:8080/baremux/index.js"></script>
+  <script src="http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/baremux/index.js"></script>
 
   <!-- Register UV Service Worker -->
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("http://localhost:8080/uv/uv.sw.js", {
+        navigator.serviceWorker.register("http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/uv/uv.sw.js", {
           scope: __uv$config.prefix,
         });
       });
@@ -69,10 +69,10 @@
 
   <script>
     // Transport setup
-    const connection = new BareMux.BareMuxConnection("http://localhost:8080/baremux/worker.js");
-    const wispUrl = "ws://localhost:8080/wisp/";
-    const bareUrl = "http://localhost:8080/bare/";
-    (async()=>{ await connection.setTransport("http://localhost:8080/epoxy/index.mjs",[{wisp:wispUrl}]); })();
+    const connection = new BareMux.BareMuxConnection("http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/baremux/worker.js");
+    const wispUrl = "ws://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/wisp/";
+    const bareUrl = "http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/bare/";
+    (async()=>{ await connection.setTransport("http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/epoxy/index.mjs",[{wisp:wispUrl}]); })();
 
     // State
     let tabs = [];
@@ -132,7 +132,7 @@
     backButton.onclick=()=>{const tab=tabs[activeIndex]; if(tab.history.length){tab.forward.push(tab.url);navigate(tab.history.pop(),false);}};
     forwardButton.onclick=()=>{const tab=tabs[activeIndex]; if(tab.forward.length){tab.history.push(tab.url);navigate(tab.forward.pop(),false);}};
     refreshButton.onclick=()=>loadTab(false); homeButton.onclick=()=>navigate('HF://home');
-    switcher.onchange=async()=>{ if(switcher.value==='epoxy') await connection.setTransport("http://localhost:8080/epoxy/index.mjs",[{wisp:wispUrl}]); else await connection.setTransport("http://localhost:8080/baremod/index.mjs",[bareUrl]); loadTab(false); };
+    switcher.onchange=async()=>{ if(switcher.value==='epoxy') await connection.setTransport("http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/epoxy/index.mjs",[{wisp:wispUrl}]); else await connection.setTransport("http://https://satisfied-kaitlin-hyperfox1-edd9a1b5.koyeb.app/baremod/index.mjs",[bareUrl]); loadTab(false); };
 
     addTab();
   </script>
